@@ -1,85 +1,24 @@
 import { Model } from 'mongoose';
 
-export class Controller {
+export class ListUpdatesController {
 
-    private service: Service;
-    private modelMedicines: Model;
-    private diseaseModel: Model;
-    private modelPrescricao: Model;
-    private modelCids: Model;
-
-    constructor() {
-        this.service = new Service();
-        this.modelMedicines = new Model('medicine');
-        this.diseaseModel = new Model('disease');
-        this.modelPrescricao = new Model('prescricao');
-        this.modelCids = new Model('cids');
-    }
+    constructor(  private readonly service: UpdatesService) {}
 
     async getUpdates(contentTypes?: string[], lastUpdate?: Date) {
-        let arr = [];
-
-        if (contentTypes && contentTypes.includes('medicine')) {
-            let medicines = await this.modelMedicines.get({ date: { $gt: lastUpdate }});
-            let sorted = reverseSort(medicines);
-            let final = [sorted[0], sorted[1], sorted[2]];
-            arr = arr.concat(final);
-        }
-
-        if (contentTypes && contentTypes.includes('diseases')) {
-            let diseases = await this.diseaseModel.get({ date: { $gt: lastUpdate }});
-            let sorted = reverseSort(diseases);
-            let final = [sorted[0], sorted[1], sorted[2]];
-            arr = arr.concat(final);
-        }
-
-        if (contentTypes && contentTypes.includes('prescricao')) {
-            let prescription = await this.modelPrescricao.get({ date: { $gt: lastUpdate }});
-            let sorted = reverseSort(prescription);
-            let final = [sorted[0], sorted[1], sorted[2]];
-            arr = arr.concat(final);
-        }
-
-        if (contentTypes && contentTypes.includes('cids')) {
-            let cids = await this.modelCids.get({ date: { $gt: lastUpdate }});
-            let sorted = reverseSort(cids);
-            let final = [sorted[0], sorted[1], sorted[2]];
-            arr = arr.concat(final);
-        }
-
-        if (arr.length >= 2) {
-            arr.forEach(function (item) {
-                item.updatedAt = this.service.formatDates(item.updatedAt);
-            })
-        } else {
-            arr = [];
-        }
-
-
-        return arr;
+        return this.service.getUpdates(contentTypes, lastUpdate)
     }
 }
 
-function reverseSort(arr) {
-    var sortedArray = arr.sort((obj1, obj2) => {
-        if (obj1.updatedAt > obj2.updatedAt) {
-            return -1;
-        }
 
-        if (obj1.updatedAt < obj2.updatedAt) {
-            return 1;
-        }
+export class UpdatesService {
+    constructor(    
+        private readonly medicinesModel: Model,
+        private readonly diseaseModel: Model,
+        private readonly prescricaoModel: Model,
+        private readonly cidsModel: Model){
+    };
 
-        return 0;
-    });
-
-    return sortedArray;
-}
-
-export class Service {
-    constructor();
-
-    formatDates(item): string {
+    formatDates(item:Model): string {
         const updatedAt = item.updatedAt as Date;
         const today = new Date();
         const lastWeek = today - this.getDaysAgo(7);
@@ -101,14 +40,50 @@ export class Service {
     }
 
     getDataFormatadaEmDias(difference: number): string {
-        var one_day = 1000 * 60 * 60 * 24;
-        const days = Math.round(difference / one_day);
+        const oneDay = 1000 * 60 * 60 * 24;
+        const days = Math.round(difference / oneDay);
         return days + ' dias atrás';
     }
 
     getDataFormatadaEmSemanas(difference: number): string {
-        var one_week = 1000 * 60 * 60 * 24 * 7;
-        const weeks = Math.round(difference / one_week);
+      const oneWeek = 1000 * 60 * 60 * 24 * 7;
+        const weeks = Math.round(difference / oneWeek);
         return weeks + ' semanas atrás';
+    }
+
+    async getUpdates(contentTypes?: string[], lastUpdate?: Date): Promise<Model[]> {
+        let arrPromises = [];
+
+        if (contentTypes){       
+            if (contentTypes.includes('medicine')) {
+                const medicinesPromise = this.medicinesModel.get({ date: { $gt: lastUpdate }}).sort({ date:-1}).limit(3);
+                arrPromises = arrPromises.concat(medicinesPromise);
+            }
+    
+            if (contentTypes.includes('diseases')) {
+                const diseasesPromise = this.diseaseModel.get({ date: { $gt: lastUpdate }}).sort({ date:-1}).limit(3);;            
+                arrPromises = arrPromises.concat(diseasesPromise);
+            }
+    
+            if (contentTypes.includes('prescricao')) {
+                const prescriptionPromise = this.prescricaoModel.get({ date: { $gt: lastUpdate }}).sort({ date:-1}).limit(3);;            
+                arrPromises = arrPromises.concat(prescriptionPromise);
+            }
+    
+            if (contentTypes.includes('cids')) {
+                const cidsPromise = this.cidsModel.get({ date: { $gt: lastUpdate }}).sort({ date:-1}).limit(3);;            
+                arrPromises = arrPromises.concat(cidsPromise);
+            }
+         }
+        const arr = await Promise.all(arrPromises)
+
+        if (arr.length < 2) {
+            return []      
+        } 
+
+
+        return arr.map((item:Model) => {
+             item.updatedAt = this.formatDates(item.updatedAt);
+        });
     }
 }
